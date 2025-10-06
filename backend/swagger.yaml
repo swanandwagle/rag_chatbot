@@ -1,0 +1,282 @@
+openapi: 3.1.0
+info:
+  title: RAG System API
+  description: Backend API for Document Q&A using RAG with local LLMs
+  version: "1.0.0"
+tags:
+  - name: admin
+    description: Admin operations for document management
+  - name: chat
+    description: Chat and query operations
+paths:
+  /:
+    get:
+      summary: Root endpoint
+      description: Root endpoint
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /health:
+    get:
+      summary: Basic health check
+      description: Basic health check
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/admin/upload:
+    post:
+      tags:
+        - admin
+      summary: Upload and process a document
+      description: |
+        Upload and process a document
+
+        Steps:
+        1. Save uploaded file
+        2. Extract text from document
+        3. Chunk text using LLM for semantic coherence
+        4. Generate embeddings for each chunk
+        5. Store in FAISS vector database
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          description: Document processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentUploadResponse'
+        "400":
+          description: File too large or insufficient text extracted
+        "500":
+          description: Error processing document
+
+  /api/v1/admin/documents:
+    get:
+      tags:
+        - admin
+      summary: List all uploaded documents
+      description: List all uploaded documents
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocumentInfo'
+
+  /api/v1/chat/query:
+    post:
+      tags:
+        - chat
+      summary: Query the RAG system with a question
+      description: |
+        Query the RAG system with a question
+
+        Steps:
+        1. Generate embedding for the query
+        2. Search vector database for relevant chunks
+        3. Build context from retrieved chunks
+        4. Generate answer using LLM with context
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        "500":
+          description: Error processing query
+
+  /api/v1/chat/query/stream:
+    post:
+      tags:
+        - chat
+      summary: Query the RAG system with streaming response
+      description: |
+        Query the RAG system with streaming response
+
+        Returns:
+          Streaming response with answer chunks
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/chat/health:
+    get:
+      tags:
+        - chat
+      summary: Check system health and statistics
+      description: Check system health and statistics
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  schemas:
+    DocumentUploadResponse:
+      type: object
+      required:
+        - document_id
+        - filename
+        - status
+        - message
+        - chunks_created
+        - timestamp
+      properties:
+        document_id:
+          type: string
+          description: Unique identifier for the uploaded document
+        filename:
+          type: string
+          description: Original filename
+        status:
+          type: string
+          description: Processing status
+          example: success
+        message:
+          type: string
+          description: Detailed processing message
+        chunks_created:
+          type: integer
+          description: Number of chunks created
+        timestamp:
+          type: string
+          format: date-time
+          description: Time of processing
+
+    ChatRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: User question
+        top_k:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 5
+          description: Number of context chunks to retrieve
+        conversation_history:
+          type: array
+          description: Optional conversation history
+          items:
+            type: object
+
+    ChatResponse:
+      type: object
+      required:
+        - answer
+        - sources
+        - query
+        - timestamp
+      properties:
+        answer:
+          type: string
+          description: Generated answer
+        sources:
+          type: array
+          description: Source snippets used to generate the answer
+          items:
+            type: object
+        query:
+          type: string
+          description: Original user query
+        timestamp:
+          type: string
+          format: date-time
+          description: Time the answer was generated
+
+    DocumentInfo:
+      type: object
+      required:
+        - document_id
+        - filename
+        - upload_date
+        - chunk_count
+      properties:
+        document_id:
+          type: string
+          description: Document identifier
+        filename:
+          type: string
+          description: Original filename
+        upload_date:
+          type: string
+          format: date-time
+          description: Upload timestamp
+        chunk_count:
+          type: integer
+          description: Number of chunks stored for the document
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - ollama_connected
+        - llm_model
+        - embedding_model
+        - total_documents
+        - total_chunks
+      properties:
+        status:
+          type: string
+          description: Overall system status
+          example: healthy
+        ollama_connected:
+          type: boolean
+          description: Whether the Ollama server is reachable
+        llm_model:
+          type: string
+          description: LLM model name
+        embedding_model:
+          type: string
+          description: Embedding model name
+        total_documents:
+          type: integer
+          description: Count of documents in the vector store
+        total_chunks:
+          type: integer
+          description: Count of vectors/chunks in the index
+
+
