@@ -12,7 +12,7 @@ class OllamaClient:
         self.base_url = settings.ollama_base_url
         self.llm_model = settings.llm_model
         self.embedding_model = settings.embedding_model
-        self.timeout = 300.0  # 5 minutes for long operations
+        self.timeout = float(settings.ollama_timeout)
     
     async def generate(self, prompt: str) -> str:
         """
@@ -108,7 +108,7 @@ class OllamaClient:
         """
         try:
             url = f"{self.base_url}/api/tags"
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url)
                 return response.status_code == 200
         except:
