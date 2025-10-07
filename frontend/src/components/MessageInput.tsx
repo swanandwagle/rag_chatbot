@@ -4,9 +4,10 @@ import React, { useState, useRef, KeyboardEvent } from 'react';
 interface MessageInputProps {
   onSendMessage: (message: string) => void;
   disabled: boolean;
+  placeholder?: string;
 }
 
-export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disabled }) => {
+export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disabled, placeholder }) => {
   const [message, setMessage] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -44,7 +45,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disab
       <textarea
         ref={textareaRef}
         className="rag-input-field"
-        placeholder="Ask a question about your documents..."
+        placeholder={placeholder ?? "Ask a question about your documents..."}
         value={message}
         onChange={handleChange}
         onKeyDown={handleKeyDown}

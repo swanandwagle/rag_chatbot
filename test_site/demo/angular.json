@@ -28,6 +28,17 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "rag-chat.*",
+                "input": "../../frontend/dist/webcomponent",
+                "output": "/vendor/"
+              },
+              {
+                "glob": "style.css",
+                "input": "../../frontend/dist",
+                "output": "/vendor/",
+                "ignore": []
               }
             ],
             "styles": [

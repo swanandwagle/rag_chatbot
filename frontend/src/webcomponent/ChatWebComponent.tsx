@@ -46,6 +46,7 @@ export class ChatWebComponent extends HTMLElement {
 
   attributeChangedCallback(name: string, oldValue: string, newValue: string) {
     // Called when observed attributes change
+    void name; // mark as used to satisfy TS when not referenced directly
     if (oldValue !== newValue) {
       this.render();
     }

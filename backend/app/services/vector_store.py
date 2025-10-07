@@ -92,14 +92,27 @@ class FAISSVectorStore:
         index_m = self._get_mtime(self.index_path)
         meta_m = self._get_mtime(self.metadata_path)
         doc_m = self._get_mtime(self.doc_info_path)
-        changed = (
-            index_m is not None and self._index_mtime is not None and index_m > self._index_mtime
-        ) or (
-            meta_m is not None and self._metadata_mtime is not None and meta_m > self._metadata_mtime
-        ) or (
-            doc_m is not None and self._docinfo_mtime is not None and doc_m > self._docinfo_mtime
+
+        # If we don't have an in-memory index yet but the artifacts now exist, load them
+        if self.index is None and self.index_path.exists() and self.metadata_path.exists():
+            self._load()
+            return
+
+        # If any of the files now exist but we have no recorded mtime, treat as changed
+        mtime_became_available = (
+            (index_m is not None and self._index_mtime is None) or
+            (meta_m is not None and self._metadata_mtime is None) or
+            (doc_m is not None and self._docinfo_mtime is None)
         )
-        if changed:
+
+        # If any of the files are newer than our recorded mtimes, reload
+        changed_after = (
+            (self._index_mtime is not None and index_m is not None and index_m > self._index_mtime) or
+            (self._metadata_mtime is not None and meta_m is not None and meta_m > self._metadata_mtime) or
+            (self._docinfo_mtime is not None and doc_m is not None and doc_m > self._docinfo_mtime)
+        )
+
+        if mtime_became_available or changed_after:
             self._load()
     
     async def add_documents(

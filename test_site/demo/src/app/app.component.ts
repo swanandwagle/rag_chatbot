@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -18,9 +18,19 @@ import { FormsModule } from '@angular/forms';
         <button type="submit">Submit</button>
       </form>
       <p class="greeting">{{ greeting }}</p>
+
+      <h2>Embedded RAG Chat</h2>
+      <!-- Web Component from frontend/dist/webcomponent/rag-chat.iife.js -->
+      <rag-chat-interface
+        api-url="http://localhost:8000/api/v1"
+        title="RAG Chat Assistant"
+        placeholder="Ask about your documents...">
+      </rag-chat-interface>
     </div>
   `,
   styleUrl: './app.component.css'
+  ,
+  schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class AppComponent {
   title = 'demo';

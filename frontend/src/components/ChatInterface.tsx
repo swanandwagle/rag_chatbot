@@ -22,7 +22,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [apiClient] = useState(() => new RagApiClient(apiUrl));
-  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'degraded' | 'disconnected' | 'checking'>('checking');
 
   useEffect(() => {
     checkHealth();
@@ -31,7 +31,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const checkHealth = async () => {
     try {
       const health = await apiClient.getHealth();
-      setConnectionStatus(health.ollama_connected ? 'connected' : 'disconnected');
+      // Consider backend reachable even if Ollama is not connected
+      setConnectionStatus(health.ollama_connected ? 'connected' : 'degraded');
     } catch (error) {
       setConnectionStatus('disconnected');
       console.error('Health check failed:', error);
@@ -91,6 +92,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className={`rag-status-indicator rag-status-${connectionStatus}`}>
           <span className="rag-status-dot"></span>
           {connectionStatus === 'connected' && 'Connected'}
+          {connectionStatus === 'degraded' && 'Degraded'}
           {connectionStatus === 'disconnected' && 'Disconnected'}
           {connectionStatus === 'checking' && 'Checking...'}
         </div>
@@ -101,6 +103,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       <MessageInput
         onSendMessage={handleSendMessage}
         disabled={isLoading || connectionStatus === 'disconnected'}
+        placeholder={placeholder}
       />
     </div>
   );

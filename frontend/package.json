@@ -2,18 +2,35 @@
 {
   "name": "rag-chat-component",
   "version": "1.0.0",
-  "description": "Reusable RAG Chat Web Component - works in Angular, React, Vue, or vanilla JS",
-  "main": "dist/rag-chat.js",
+  "description": "Reusable RAG Chat component as React lib and Web Component",
+  "main": "dist/index.cjs.js",
+  "module": "dist/index.es.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.cjs.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "build:webcomponent": "tsc && vite build --mode webcomponent",
+    "build": "npm run build:types && vite build --mode lib",
+    "build:webcomponent": "vite build --mode webcomponent",
+    "build:types": "tsc -p tsconfig.build.json",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
+  },
+  "peerDependencies": {
+    "react": ">=17",
+    "react-dom": ">=17"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
