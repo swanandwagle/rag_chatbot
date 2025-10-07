@@ -131,14 +131,24 @@ class FAISSVectorStore:
             document_id: Unique document identifier
             filename: Original filename
         """
-        # Convert embeddings to numpy array
+        # Convert embeddings to numpy array and L2-normalize for cosine-like similarity with L2 metric
         embeddings_array = np.array(embeddings, dtype=np.float32)
+        if embeddings_array.ndim != 2:
+            raise ValueError("Embeddings array must be 2-dimensional")
+        # Normalize in-place
+        faiss.normalize_L2(embeddings_array)
         
         # Initialize index if this is the first document
         if self.index is None:
             self.dimension = embeddings_array.shape[1]
             # Use HNSW index for better performance
             self.index = faiss.IndexHNSWFlat(self.dimension, 32)
+            # Improve recall during construction and search
+            try:
+                self.index.hnsw.efConstruction = 100
+                self.index.hnsw.efSearch = 128
+            except Exception:
+                pass
             print(f"Created new FAISS HNSW index with dimension {self.dimension}")
         
         # Add embeddings to FAISS index
@@ -186,19 +196,42 @@ class FAISSVectorStore:
         if self.index is None or self.index.ntotal == 0:
             return []
         
-        # Convert to numpy array
+        # Convert to numpy array and L2-normalize
         query_array = np.array([query_embedding], dtype=np.float32)
+        faiss.normalize_L2(query_array)
         
+        # Tune efSearch based on requested top_k (best-effort)
+        try:
+            target_ef = max(64, min(512, int(top_k) * 32))
+            if hasattr(self.index, "hnsw"):
+                # Only increase efSearch; avoid reducing it if already higher
+                current = getattr(self.index.hnsw, "efSearch", 64)
+                if target_ef > current:
+                    self.index.hnsw.efSearch = target_ef
+        except Exception:
+            pass
+
         # Search FAISS index
         distances, indices = self.index.search(query_array, min(top_k, self.index.ntotal))
         
         # Prepare results
         results = []
         for dist, idx in zip(distances[0], indices[0]):
-            if idx < len(self.metadata):  # Valid index
+            if idx is None:
+                continue
+            # Guard against invalid indices sometimes returned by ANN indices
+            if idx >= 0 and idx < len(self.metadata):
+                # With L2 on unit vectors, cos = 1 - dist/2; map to [0,1] for readability
+                cosine = 1.0 - float(dist) / 2.0
+                # Clamp cosine to [-1, 1]
+                if cosine > 1.0:
+                    cosine = 1.0
+                elif cosine < -1.0:
+                    cosine = -1.0
+                similarity_01 = (cosine + 1.0) / 2.0
                 result = {
                     **self.metadata[idx],
-                    "similarity_score": float(1 / (1 + dist))  # Convert distance to similarity
+                    "similarity_score": similarity_01
                 }
                 results.append(result)
         

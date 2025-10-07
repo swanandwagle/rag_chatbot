@@ -30,10 +30,22 @@ class Settings(BaseSettings):
     chunk_size: int  # Target tokens per chunk
     chunk_overlap: int  # Overlap tokens
     use_llm_chunking: bool  # Toggle to enable/disable LLM-based chunking
+    use_sentence_aware_split: bool = True  # Sentence-aware fallback when LLM chunking is off
 
     # API settings
     api_prefix: str
     cors_origins: str
+
+    # Tokenization / windowing settings
+    tokenizer_model_name: str = "meta-llama/Meta-Llama-3.1-8B"
+    hf_local_files_only: bool = False
+    llm_window_tokens: int = 8000
+    llm_window_overlap_tokens: int = 200
+
+    # Retrieval settings
+    similarity_threshold: float = 0.6
+    default_top_k: int = 10
+    max_top_k: int = 20
 
     # Settings config
     model_config = SettingsConfigDict(

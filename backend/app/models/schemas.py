@@ -2,6 +2,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
+from app.config import settings
 
 
 class DocumentUploadResponse(BaseModel):
@@ -17,7 +18,7 @@ class DocumentUploadResponse(BaseModel):
 class ChatRequest(BaseModel):
     """Request model for chat queries"""
     query: str = Field(..., min_length=1, max_length=2000)
-    top_k: int = Field(default=5, ge=1, le=20)
+    top_k: int = Field(default=settings.default_top_k, ge=1, le=settings.max_top_k)
     conversation_history: Optional[List[dict]] = None
 
 

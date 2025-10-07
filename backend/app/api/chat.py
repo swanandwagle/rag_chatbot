@@ -7,6 +7,7 @@ from typing import AsyncGenerator
 from app.models.schemas import ChatRequest, ChatResponse, HealthResponse
 from app.services.ollama_client import OllamaClient
 from app.services.vector_store import FAISSVectorStore
+from app.config import settings
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -33,10 +34,14 @@ async def query(request: ChatRequest):
         # Search vector store for relevant chunks
         results = await vector_store.search(
             query_embedding=query_embedding,
-            top_k=request.top_k
+            top_k=min(request.top_k, getattr(settings, "max_top_k", 20))
         )
         
-        if not results:
+        # Apply similarity threshold filtering
+        threshold = float(getattr(settings, "similarity_threshold", 0.6))
+        filtered_results = [r for r in results if r.get("similarity_score", 0) >= threshold]
+
+        if not filtered_results:
             return ChatResponse(
                 answer="I don't have any information in my knowledge base to answer this question.",
                 sources=[],
@@ -44,25 +49,44 @@ async def query(request: ChatRequest):
                 timestamp=datetime.utcnow()
             )
         
-        # Build context from retrieved chunks
-        context = "\n\n---\n\n".join([
-            f"[Source: {r['filename']}, Chunk {r['chunk_index']+1}/{r['total_chunks']}]\n{r['content']}"
-            for r in results
-        ])
+        # Cap and diversify context to avoid exceeding model window
+        # Sort by similarity then select top unique chunks by filename/chunk id
+        unique = []
+        seen_keys = set()
+        for r in sorted(filtered_results, key=lambda x: x.get("similarity_score", 0), reverse=True):
+            key = (r.get("filename"), r.get("chunk_index"))
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            unique.append(r)
+        # Token/char cap: keep the context within ~10k chars
+        context_parts = []
+        total_chars = 0
+        for r in unique:
+            part = f"[Source: {r['filename']}, Chunk {r['chunk_index']+1}/{r['total_chunks']}]\n{r['content']}"
+            if total_chars + len(part) > 10000:
+                break
+            context_parts.append(part)
+            total_chars += len(part)
+        context = "\n\n---\n\n".join(context_parts)
         
-        # Build prompt for LLM (concise, single-sentence answer)
-        prompt = f"""You are a precise assistant. Answer the user's question using ONLY the context.
+        # Build prompt for LLM per user's style guidelines
+        prompt = f"""You are a helpful assistant answering questions based on provided documents.
 
 Context:
 {context}
 
 Question: {request.query}
 
-Rules:
-- If the context is insufficient, reply exactly: "I don't have enough information in the provided documents to answer this question."
-- Otherwise, reply with a SINGLE short sentence. Do not include explanations, citations, or extra details.
+Instructions:
+- Answer directly and naturally, as if you're an expert on this topic
+- Use 2-4 clear, concise sentences
+- If the information needed to answer isn't in the context above, respond with: "I don't have enough information to answer this question."
+- Never mention "the context", "the documents", "based on the text", or similar meta-references
+- Present information as facts, not as "according to" or "the text states"
+- Be confident and direct in your response
 
-Final answer:"""
+Final Answer:"""
         
         # Generate answer using LLM
         answer = await ollama_client.generate(prompt)
@@ -76,7 +100,7 @@ Final answer:"""
                 "similarity_score": r["similarity_score"],
                 "content_preview": r["content"][:200] + "..." if len(r["content"]) > 200 else r["content"]
             }
-            for r in results
+            for r in unique
         ]
         
         return ChatResponse(
@@ -106,32 +130,51 @@ async def query_stream(request: ChatRequest):
             # Search vector store
             results = await vector_store.search(
                 query_embedding=query_embedding,
-                top_k=request.top_k
+                top_k=min(request.top_k, getattr(settings, "max_top_k", 20))
             )
             
-            if not results:
+            threshold = float(getattr(settings, "similarity_threshold", 0.6))
+            filtered_results = [r for r in results if r.get("similarity_score", 0) >= threshold]
+            if not filtered_results:
                 yield "I don't have any information in my knowledge base to answer this question."
                 return
             
-            # Build context
-            context = "\n\n---\n\n".join([
-                f"[Source: {r['filename']}, Chunk {r['chunk_index']+1}/{r['total_chunks']}]\n{r['content']}"
-                for r in results
-            ])
+            # Cap and diversify context
+            unique = []
+            seen_keys = set()
+            for r in sorted(filtered_results, key=lambda x: x.get("similarity_score", 0), reverse=True):
+                key = (r.get("filename"), r.get("chunk_index"))
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                unique.append(r)
+            context_parts = []
+            total_chars = 0
+            for r in unique:
+                part = f"[Source: {r['filename']}, Chunk {r['chunk_index']+1}/{r['total_chunks']}]\n{r['content']}"
+                if total_chars + len(part) > 10000:
+                    break
+                context_parts.append(part)
+                total_chars += len(part)
+            context = "\n\n---\n\n".join(context_parts)
             
-            # Build prompt (concise streaming answer)
-            prompt = f"""You are a precise assistant. Answer the user's question using ONLY the context.
+            # Build prompt (streaming; same as non-streaming)
+            prompt = f"""You are a helpful assistant answering questions based on provided documents.
 
 Context:
 {context}
 
 Question: {request.query}
 
-Rules:
-- If the context is insufficient, reply exactly: "I don't have enough information in the provided documents."
-- Otherwise, reply with a SINGLE short sentence. Do not include explanations, citations, or extra details.
+Instructions:
+- Answer directly and naturally, as if you're an expert on this topic
+- Use 2-4 clear, concise sentences
+- If the information needed to answer isn't in the context above, respond with: "I don't have enough information to answer this question."
+- Never mention "the context", "the documents", "based on the text", or similar meta-references
+- Present information as facts, not as "according to" or "the text states"
+- Be confident and direct in your response
 
-Final answer:"""
+Final Answer:"""
             
             # Stream answer
             async for chunk in ollama_client.generate_stream(prompt):
